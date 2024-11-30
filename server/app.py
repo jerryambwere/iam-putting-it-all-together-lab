@@ -9,6 +9,8 @@ from models import User, Recipe
 
 
 class Signup(Resource):
+    pass
+
     def post(self):
         data = request.get_json() if request.is_json else request.form
         if "username" not in data or "password" not in data:
@@ -16,8 +18,8 @@ class Signup(Resource):
         try:
             user = User(
                 username=data["username"],
-                image_url=data.get("image_url", ""),  # Default empty string if not provided
-                bio=data.get("bio", ""),  # Default empty string if not provided
+                image_url=data["image_url"],
+                bio=data["bio"],
             )
             user.password_hash = data["password"]
             db.session.add(user)
@@ -33,12 +35,9 @@ class Signup(Resource):
 
 class CheckSession(Resource):
     def get(self):
-        if "user_id" in session:  # Check if 'user_id' exists in the session
+        if session["user_id"]:
             user = User.query.filter_by(id=session["user_id"]).first()
-            if user:
-                return make_response(user.to_dict(), 200)
-            else:
-                return make_response({"error": "User not found"}, 404)
+            return make_response(user.to_dict(), 200)
         else:
             return make_response({"error": "You are not logged in"}, 401)
 
@@ -48,7 +47,6 @@ class Login(Resource):
         data = request.get_json() if request.is_json else request.form
         if "username" not in data or "password" not in data:
             return {"error": "Missing required fields"}, 422
-        
         user = User.query.filter_by(username=data["username"]).first()
         if user and user.authenticate(data["password"]):
             session["user_id"] = user.id
@@ -59,7 +57,7 @@ class Login(Resource):
 
 class Logout(Resource):
     def delete(self):
-        if "user_id" in session:
+        if session["user_id"]:
             session["user_id"] = None
             return make_response({}, 204)
         else:
@@ -68,25 +66,21 @@ class Logout(Resource):
 
 class RecipeIndex(Resource):
     def get(self):
-        if "user_id" not in session:
+        if not session["user_id"]:
             return make_response({"error": "You are not logged in"}, 401)
-
-        user = User.query.get(session["user_id"])
-        if user:
-            recipes = Recipe.query.filter_by(user_id=user.id).all()
-            return make_response([recipe.to_dict() for recipe in recipes], 200)
-        else:
-            return make_response({"error": "User not found"}, 404)
+        recipes = Recipe.query.all()
+        return make_response([recipe.to_dict() for recipe in recipes], 200)
 
     def post(self):
         data = request.get_json() if request.is_json else request.form
-        if "user_id" not in session:
+        if not session["user_id"]:
             return make_response({"error": "You are not logged in"}, 401)
-
-        # Check if required fields are present
-        if not data.get("title") or not data.get("instructions") or not data.get("minutes_to_complete"):
-            return make_response({"error": "Data entered is invalid"}, 422)
-
+        if (
+            not data["title"]
+            or not data["instructions"]
+            or not data["minutes_to_complete"]
+        ):
+            return {"error": "Data entered is invalid"}, 422
         try:
             recipe = Recipe(
                 title=data["title"],
@@ -99,10 +93,9 @@ class RecipeIndex(Resource):
             return make_response(recipe.to_dict(), 201)
         except Exception as e:
             print(e)
-            return make_response({"error": str(e)}, 422)
+            return {"error": str(e)}, 422
 
 
-# Adding the resources to the API
 api.add_resource(Signup, "/signup", endpoint="signup")
 api.add_resource(CheckSession, "/check_session", endpoint="check_session")
 api.add_resource(Login, "/login", endpoint="login")
